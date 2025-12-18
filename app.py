@@ -2,7 +2,7 @@ import streamlit as st
 from frontend.provider import setup_agent 
 from dotenv import load_dotenv
 load_dotenv()
-import ui_restored_tmp as ui
+from frontend import ui
 from database import (
     save_user_settings,
 )

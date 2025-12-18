@@ -17,15 +17,6 @@ load_dotenv()
 # Import database functions
 from database import (
     init_mysql_db,
-    create_user,
-    authenticate_user,
-    get_user_settings,
-    save_user_settings,
-    save_user_resume,
-    get_user_resume_by_id,
-    create_or_update_google_user,
-    get_user_by_google_id,
-    get_user_by_email,
 )
 
 # Import API routes

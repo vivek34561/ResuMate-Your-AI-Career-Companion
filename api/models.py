@@ -47,13 +47,6 @@ class Token(BaseModel):
     email: str
 
 
-class GoogleAuthRequest(BaseModel):
-    google_id: str
-    email: EmailStr
-    name: str
-    picture: Optional[str] = None
-
-
 # User Models
 class UserSettings(BaseModel):
     provider: LLMProvider = LLMProvider.GROQ

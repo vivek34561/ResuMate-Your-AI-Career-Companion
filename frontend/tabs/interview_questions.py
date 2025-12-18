@@ -1,5 +1,5 @@
 import streamlit as st
-import ui_restored_tmp as ui
+from frontend import ui
 
 
 def generate_interview_questions(agent, question_types, difficulty, num_questions):

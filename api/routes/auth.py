@@ -13,15 +13,12 @@ from api.models import (
     UserRegister,
     UserLogin,
     Token,
-    GoogleAuthRequest,
     SuccessResponse,
     ErrorResponse
 )
 from database import (
     create_user,
     authenticate_user,
-    create_or_update_google_user,
-    get_user_by_google_id,
     get_user_by_email,
 )
 
@@ -160,56 +157,7 @@ async def login_user(credentials: UserLogin):
         )
 
 
-@router.post("/google", response_model=Token)
-async def google_auth(google_data: GoogleAuthRequest):
-    """
-    Authenticate with Google OAuth
-    
-    - **google_id**: Google user ID
-    - **email**: Google email
-    - **name**: Google display name
-    - **picture**: Optional profile picture URL
-    """
-    try:
-        # Check if user exists
-        user = get_user_by_google_id(google_data.google_id)
-        
-        if not user:
-            # Create new user from Google data
-            user_id = create_or_update_google_user(
-                google_data.google_id,
-                google_data.email,
-                google_data.name,
-                google_data.picture
-            )
-            
-            if not user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create user from Google data"
-                )
-            
-            user = {"id": user_id, "email": google_data.email}
-        
-        # Create access token
-        access_token = create_access_token(
-            data={"user_id": user["id"], "email": user["email"]}
-        )
-        
-        return Token(
-            access_token=access_token,
-            token_type="bearer",
-            user_id=user["id"],
-            email=user["email"]
-        )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Google authentication failed: {str(e)}"
-        )
+ 
 
 
 @router.get("/me")

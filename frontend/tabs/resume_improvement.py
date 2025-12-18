@@ -1,5 +1,5 @@
 import streamlit as st
-import ui_restored_tmp as ui
+from frontend import ui
 from agents import ResumeAnalysisAgent
 
 

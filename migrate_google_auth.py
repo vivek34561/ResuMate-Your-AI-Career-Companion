@@ -94,11 +94,7 @@ def migrate_database():
             ALTER TABLE users 
             MODIFY username VARCHAR(255) NULL,
             MODIFY password_hash VARCHAR(255) NULL
-        """)
-        
-        # Add new columns if they don't exist
-        if 'email' not in columns:
-            print("   - Adding email column...")
+        """Deprecated: Google OAuth migration removed."""
             cursor.execute("""
                 ALTER TABLE users 
                 ADD COLUMN email VARCHAR(255) UNIQUE

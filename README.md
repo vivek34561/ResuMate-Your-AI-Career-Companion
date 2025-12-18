@@ -4,7 +4,7 @@
 
 ## 🌟 Features
 
-- **🔐 Google OAuth Login** - Secure "Continue with Google" authentication
+- **🔐 Simple Login** - Form-based authentication (email + password)
 - **Resume Analysis** - AI-powered analysis with ATS scoring
 - **Smart Chatbot** - Ask questions about your resume with context memory
 - **Interview Preparation** - Generate personalized interview questions
@@ -19,15 +19,11 @@
 
 ### Prerequisites
 
-1. **Google OAuth Credentials** (Required)
-   - See [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md) for detailed setup instructions
-   - Get credentials from [Google Cloud Console](https://console.cloud.google.com/)
-
-2. **Groq API Key** (Required for AI features)
+1. **Groq API Key** (Required for AI features)
    - Get free API key from [Groq Console](https://console.groq.com/keys)
    - Watch: [How to Get Groq API Key](https://www.youtube.com/watch?v=nt1PJu47nTk)
 
-3. **MySQL Database** (Required)
+2. **MySQL Database** (Required)
    - Local: MySQL 8.0+
    - Heroku: ClearDB or JawsDB add-on
 
@@ -50,14 +46,10 @@
    ```
    
 4. Configure your `.env` file with:
-   - Google OAuth credentials
    - Groq API key
    - MySQL database credentials
 
-5. Set up the database:
-   ```powershell
-   python migrate_google_auth.py
-   ```
+5. Set up the database (first run initializes tables automatically).
 
 6. Run the app:
    ```powershell
@@ -144,7 +136,7 @@ heroku logs --tail
 
 ## Notes & Troubleshooting
 
-- API Keys: The app UI asks for your OpenAI API key in the sidebar. You can also set `OPENAI_API_KEY` in Heroku config vars, but the current UI still expects a key pasted by the user at runtime.
+- API Keys: The app UI asks for your Groq API key in the sidebar. You can also set `GROQ_API_KEY` in Heroku config vars; the UI supports pasting at runtime.
 - FFmpeg: `Aptfile` installs `ffmpeg` required by `streamlit-webrtc`/`av`. If you don’t use voice/video, you can remove `Aptfile` and the apt buildpack.
 - Build errors on `faiss-cpu`/`av`: Ensure Heroku-22/24 stack and Python 3.11. If issues persist, try pinning versions in `requirements.txt`.
 - Memory/timeouts: Streamlit apps are single-process; keep models lightweight. Prefer hosted APIs (OpenAI, Pinecone) to heavy local compute.
