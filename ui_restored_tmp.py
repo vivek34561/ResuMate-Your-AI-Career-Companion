@@ -71,16 +71,7 @@ def setup_sidebar() -> Dict:
             
             # Logout button
             if st.button("🚪 Logout", use_container_width=True):
-                # Check if user is using Google auth
-                if st.session_state.get('connected'):
-                    try:
-                        from auth import init_google_auth
-                        authenticator = init_google_auth()
-                        authenticator.logout()
-                    except Exception as e:
-                        st.warning(f"Google logout issue: {e}")
-                
-                # Clear session state
+                # Clear session state (Google OAuth removed)
                 st.session_state.user = None
                 st.session_state.user_settings = {}
                 if 'connected' in st.session_state:

@@ -12,25 +12,32 @@ load_dotenv()
 # --- Database Configuration ---
 # Support both PostgreSQL (Heroku) and MySQL (local/JawsDB)
 def parse_database_config():
-    """Parse database configuration from env vars or DATABASE_URL."""
+    """Parse database configuration from env vars or DATABASE_URL.
+
+    Precedence rules:
+    1) If DATABASE_URL is PostgreSQL => use it.
+    2) If DATABASE_URL is MySQL AND no explicit MYSQL_* env vars are set => use DATABASE_URL.
+    3) Otherwise prefer explicit MYSQL_* env vars for local/dev MySQL.
+    4) Fallback to JAWSDB/CLEARDB if provided, else local defaults.
+    """
     # PRIORITY: Check for PostgreSQL first (Heroku Postgres)
     database_url = os.getenv("DATABASE_URL")
     
-    """Parse database configuration from env vars or DATABASE_URL."""
-    # PRIORITY: Check for PostgreSQL first (Heroku Postgres)
-    database_url = os.getenv("DATABASE_URL")
-    
-    if database_url:
-        # Check if it's PostgreSQL or MySQL
-        if database_url.startswith("postgres://") or database_url.startswith("postgresql://"):
-            # It's PostgreSQL - Heroku Postgres detected!
-            print("🐘 Using PostgreSQL (Heroku Postgres)")
-            return {
-                "type": "postgresql",
-                "url": database_url
-            }
-        else:
-            # It's MySQL
+    if database_url and (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
+        # It's PostgreSQL - Heroku Postgres detected!
+        print("🐘 Using PostgreSQL (Heroku Postgres)")
+        return {
+            "type": "postgresql",
+            "url": database_url
+        }
+
+    # If DATABASE_URL points to MySQL, only use it when there are no explicit MYSQL_* overrides
+    mysql_overrides_present = any(
+        os.getenv(k) for k in ("MYSQL_HOST", "MYSQL_PORT", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE")
+    )
+    if database_url and not (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
+        if not mysql_overrides_present:
+            # Use MySQL from DATABASE_URL
             print("🐬 Using MySQL from DATABASE_URL")
             parsed = urlparse(database_url)
             return {
@@ -41,6 +48,9 @@ def parse_database_config():
                 "password": parsed.password or "",
                 "database": parsed.path.lstrip("/") if parsed.path else "resume_tracker"
             }
+        else:
+            # Prefer explicit MYSQL_* env vars over MySQL DATABASE_URL
+            print("⚠️ Ignoring MySQL DATABASE_URL; using explicit MYSQL_* environment variables")
     
     # Fallback to JAWSDB or CLEARDB for MySQL
     mysql_url = os.getenv("JAWSDB_URL") or os.getenv("CLEARDB_DATABASE_URL")
