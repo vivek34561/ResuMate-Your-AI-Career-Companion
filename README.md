@@ -153,23 +153,15 @@ Then open the printed local URL in your browser.
 
 ---
 
-## FastAPI Backend (New)
+## Backend Removal
 
-A structured FastAPI backend is available under `backend/` and mounts existing routers from the `api/` package.
+This project now runs purely as a Streamlit frontend. The previous FastAPI backend has been removed. All features (resume analysis, Q&A, interview questions, improvements, cover letter, job search) run locally via agents.
 
-- Base URL: `http://localhost:8000`
-- Health: `/health`
-- Versioned routes: `/api/v1/*`
-
-Run locally:
+To run locally:
 
 ```powershell
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-Configure CORS and Streamlit connection:
-
-- `CORS_ALLOWED_ORIGINS` (comma-separated), default: `http://localhost:8501`
-- `BACKEND_URL` (used by Streamlit to show status), default: `http://localhost:8000`
-
-Streamlit shows backend status in the header caption.
+If you previously set `BACKEND_URL` or configured CORS, those are no longer needed.

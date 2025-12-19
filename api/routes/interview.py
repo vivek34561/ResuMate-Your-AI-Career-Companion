@@ -62,21 +62,11 @@ async def start_interview(
         # Get resume text (correct param order and latest fallback)
         if resume_id:
             resume_data = get_user_resume_by_id(user_id, resume_id)
-        else:
-            all_resumes = get_user_resumes(user_id)
-            if not all_resumes:
-                resume_data = None
-            else:
-                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
-                resume_data = get_user_resume_by_id(user_id, latest_id)
-        
-        if not resume_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No resume found. Please upload a resume first."
-            )
-        
-        resume_text = resume_data.get("resume_text")
+        """
+        Deprecated: FastAPI backend removed. This module is no longer used.
+        """
+
+        raise RuntimeError("FastAPI routes removed. Use Streamlit-only frontend.")
         
         # Set resume text in agent
         if not agent.resume_text:

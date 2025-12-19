@@ -1,20 +1,23 @@
 from frontend import ui
-from frontend.backend_client import BackendClient
+from agents import JobAgent
 
-def render(client: BackendClient):
+def render(client=None):
     import streamlit as st
 
     st.title("🌍 Recruitment Agent - Job Search")
 
     @st.cache_data(ttl=600, show_spinner=False)
     def _cached_job_search(platform: str, query: str, location: str | None, num_results: int):
-        return client.search_jobs(
-            user=st.session_state.get('user') or {},
-            platform=platform.lower(),
+        agent = JobAgent(jooble_api_key=(st.session_state.get('user_settings') or {}).get('jooble_api_key'))
+        jobs = agent.search_jobs(
             query=query,
             location=location,
-            max_results=num_results,
+            platform=platform.lower(),
+            num_results=num_results,
+            country="in",
+            jooble_api_key=(st.session_state.get('user_settings') or {}).get('jooble_api_key')
         )
+        return jobs
 
     platform = st.selectbox("Select Job Platform", ["Adzuna", "Jooble"])
 

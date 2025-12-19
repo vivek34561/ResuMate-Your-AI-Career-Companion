@@ -28,19 +28,11 @@ async def search_jobs(
     - Body: { query, location, max_results }
     - Query param: platform=adzuna|jooble
     """
-    try:
-        agent = JobAgent()
-        jobs = agent.search_jobs(
-            query=request.query or "",
-            location=request.location,
-            platform=platform,
-            experience=None,
-            num_results=request.max_results or 10,
-            country="in",
-        )
+    """
+    Deprecated: FastAPI backend removed. This module is no longer used.
+    """
 
-        # Normalize to JobListing model fields
-        listings = []
+    raise RuntimeError("FastAPI routes removed. Use Streamlit-only frontend.")
         for j in jobs or []:
             if "error" in j:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=j["error"])

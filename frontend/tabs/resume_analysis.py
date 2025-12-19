@@ -2,7 +2,8 @@ import os
 import json
 import streamlit as st
 from frontend import ui
-from frontend.backend_client import BackendClient
+from agents import ResumeAnalysisAgent
+from database import save_user_resume, get_user_resume_by_id
 
 ROLE_REQUIREMENTS = {
     "AI/ML Engineer": [
@@ -44,37 +45,55 @@ ROLE_REQUIREMENTS = {
 }
 
 
-def analyze_resume(client: BackendClient, resume_file, role, custom_jd, quick: bool = False):
+def analyze_resume(_client_unused, resume_file, role, custom_jd, quick: bool = False):
+    """Analyze resume locally using the ResumeAnalysisAgent (no backend)."""
     if not resume_file:
         st.error("Please upload a resume or select a saved resume.")
         return
 
-    with st.spinner("Analyzing resume via backend..."):
+    agent: ResumeAnalysisAgent = st.session_state.get("resume_agent")
+    if not agent:
+        st.error("Agent not initialized. Please configure provider/API key in the sidebar.")
+        return
+
+    with st.spinner("Analyzing resume locally..."):
         try:
-            active_resume_id = None
-            # If using saved resume selected from sidebar
+            # If using a saved resume, fetch text from DB and analyze
             if resume_file == "USE_SAVED_RESUME":
-                active_resume_id = st.session_state.get("use_saved_resume_id") or st.session_state.get("selected_resume_id")
+                user = st.session_state.get("user") or {}
+                resume_id = st.session_state.get("use_saved_resume_id") or st.session_state.get("selected_resume_id")
+                if not (user and resume_id):
+                    st.error("Could not determine saved resume to analyze.")
+                    return
+                row = get_user_resume_by_id(user.get("id"), resume_id)
+                if not row or not row.get("resume_text"):
+                    st.error("Saved resume not found or empty.")
+                    return
+                result = agent.analyze_resume_text(
+                    row.get("resume_text", ""),
+                    role_requirements=ROLE_REQUIREMENTS.get(role),
+                    custom_jd=custom_jd,
+                    quick=quick,
+                )
             else:
-                # Upload new resume to backend
-                upload_resp = client.upload_resume(st.session_state.get('user') or {}, resume_file)
-                active_resume_id = upload_resp.get("resume_id")
-                st.session_state["active_resume_id"] = active_resume_id
+                # Analyze uploaded file
+                result = agent.analyze_resume(
+                    resume_file,
+                    role_requirements=ROLE_REQUIREMENTS.get(role),
+                    custom_jd=custom_jd,
+                    quick=quick,
+                )
+                # Save uploaded resume for reuse if user logged in
+                user = st.session_state.get("user")
+                if user and agent.resume_text and agent.resume_hash:
+                    try:
+                        filename = getattr(resume_file, "name", "resume")
+                        rid = save_user_resume(user["id"], filename, agent.resume_hash, agent.resume_text)
+                        if rid:
+                            st.session_state["selected_resume_id"] = rid
+                    except Exception as e:
+                        st.info(f"Could not save resume to DB: {e}")
 
-            if not active_resume_id:
-                st.error("Could not determine resume to analyze.")
-                return
-
-            # Choose skills if no JD provided
-            custom_skills = None if custom_jd else ROLE_REQUIREMENTS.get(role)
-            result = client.analyze_resume(
-                user=st.session_state.get('user') or {},
-                role=role,
-                jd_text=custom_jd or None,
-                custom_skills=custom_skills,
-                resume_id=active_resume_id,
-                cutoff_score=75,
-            )
             st.session_state.resume_analyzed = True
             st.session_state.analysis_result = result
             return result
@@ -82,9 +101,11 @@ def analyze_resume(client: BackendClient, resume_file, role, custom_jd, quick: b
             st.error(f"Error analyzing resume: {e}")
 
 
-def render(client: BackendClient):
-    role, custom_jd = ui.role_selection_section(ROLE_REQUIREMENTS)
+def render(client=None):
+    role, custom_jd = ui.role_selection_section(ROLE_REQUIREMENTS) 
+    # this will return selecteed role and jd 
     uploaded_resume = ui.resume_upload_section()
+    # this will return uploaded resume
 
     quick_mode = st.checkbox(
         "Quick analysis (faster, fewer skills, skips deep weaknesses)",
@@ -92,12 +113,12 @@ def render(client: BackendClient):
         help="Quick mode avoids an extra JD skill extraction call and limits skills to speed up analysis.",
     )
 
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
+    col = st.columns([1, 1, 1])
+    with col[1]:
         if st.button("Analyze Resume", type="primary"):
             has_resume = uploaded_resume is not None
-            if client and has_resume:
-                result = analyze_resume(client, uploaded_resume, role, custom_jd, quick=quick_mode)
+            if has_resume:
+                result = analyze_resume(None, uploaded_resume, role, custom_jd, quick=quick_mode)
                 if result:
                     st.session_state.analysis_result = result
                     st.session_state.resume_analyzed = True
@@ -105,9 +126,7 @@ def render(client: BackendClient):
                         st.session_state.analysis_result['_user'] = st.session_state.user.get('username') or st.session_state.user.get('email')
                     st.rerun()
             else:
-                if not client:
-                    st.warning("Backend client is not available.")
-                elif not has_resume:
+                if not has_resume:
                     st.warning("Please upload a resume or select a saved resume.")
 
     if st.session_state.analysis_result:

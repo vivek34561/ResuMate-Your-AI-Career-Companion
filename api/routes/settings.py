@@ -23,19 +23,11 @@ async def get_settings(user: dict = Depends(verify_token)):
     
     Requires: Bearer token in Authorization header
     """
-    try:
-        user_id = user["user_id"]
-        
-        settings = get_user_settings(user_id)
-        
-        if not settings:
-            # Return default settings
-            return UserSettings(
-                provider="groq",
-                api_key=None,
-                model=None,
-                ollama_base_url="http://localhost:11434",
-                ollama_model="llama3.1:8b"
+    """
+    Deprecated: FastAPI backend removed. This module is no longer used.
+    """
+
+    raise RuntimeError("FastAPI routes removed. Use Streamlit-only frontend.")
             )
         
         return UserSettings(

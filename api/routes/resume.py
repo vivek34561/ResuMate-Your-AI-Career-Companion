@@ -152,47 +152,11 @@ async def analyze_resume(
         user_id = user["user_id"]
         
         # Get resume text
-        if resume_id:
-            resume_data = get_user_resume_by_id(user_id, resume_id)
-        else:
-            all_resumes = get_user_resumes(user_id)
-            if not all_resumes:
-                resume_data = None
-            else:
-                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
-                resume_data = get_user_resume_by_id(user_id, latest_id)
-        
-        if not resume_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No resume found. Please upload a resume first."
-            )
-        
-        resume_text = resume_data.get("resume_text")
-        
-        # Configure agent cutoff and analyze from text
-        try:
-            if request.cutoff_score is not None:
-                agent.cutoff_score = request.cutoff_score
-            result = agent.analyze_resume_text(
-                resume_text,
-                role_requirements=(request.custom_skills or []),
-                custom_jd=request.jd_text,
-                quick=False,
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Agent analysis error: {str(e)}"
-            )
-        
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Analysis failed"
-            )
-        
-        resp = ResumeAnalysisResponse(
+        """
+        Deprecated: FastAPI backend removed. This module is no longer used.
+        """
+
+        raise RuntimeError("FastAPI routes removed. Use Streamlit-only frontend.")
             overall_score=result.get("overall_score", 0),
             matching_skills=result.get("matching_skills", []),
             missing_skills=result.get("missing_skills", []),

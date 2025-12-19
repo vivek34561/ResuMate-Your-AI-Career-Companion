@@ -20,8 +20,6 @@ from frontend.tabs import (
 )
 import atexit
 import os
-import requests
-from frontend.backend_client import BackendClient
 
 st.set_page_config(
     page_title = "ResuMate - Your AI Career Companion",
@@ -66,17 +64,6 @@ atexit.register(cleanup)
 def main():
     ui.setup_page()
     ui.display_header()
-    # Backend health (optional): show FastAPI backend connectivity
-    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-    backend_status = "unknown"
-    try:
-        r = requests.get(f"{backend_url}/health", timeout=2)
-        if r.ok and (r.json() or {}).get("status") == "ok":
-            backend_status = "connected"
-        else:
-            backend_status = "unavailable"
-    except Exception:
-        backend_status = "unavailable"
     # Login gate
     if not ensure_logged_in():
         return
@@ -87,8 +74,7 @@ def main():
         # Only set defaults if not provided in the current sidebar selection
         config.setdefault('provider', us.get('provider'))
         config.setdefault('model', us.get('model'))
-    # Initialize backend client and (optionally) local agent
-    client = BackendClient(base_url=backend_url)
+    # Initialize local agent for features that still use it (e.g., cover letter)
     agent  = setup_agent(config)
     # Save the settings for this user
     try:
@@ -104,31 +90,31 @@ def main():
     except Exception as e:
         st.info(f"Could not save settings: {e}")
     
-    st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')} | Analyzed: {st.session_state.get('resume_analyzed')} | Backend: {backend_status}")
+    st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')} | Analyzed: {st.session_state.get('resume_analyzed')}")
     
     tabs  = ui.create_tabs()
     
     with tabs[0]:
-        # Use backend for analysis
-        resume_analysis.render(client)
+        # Local analysis (no backend)
+        resume_analysis.render()
             
     with tabs[1]:
-        # Use backend for Q&A
-        resume_qa.render(client)
+        # Local Q&A (no backend)
+        resume_qa.render()
     
     
     with tabs[2]:
-        interview_questions.render(client)
+        interview_questions.render()
             
     
-    with tabs[3]:   # Resume Improvement tab
-        resume_improvement.render(client)
+    with tabs[3]:   # Resume Improvement tab (local agent)
+        resume_improvement.render()
 
     with tabs[4]:   # Cover Letter tab
         cover_letter.render(st.session_state.resume_agent)
 
-    with tabs[5]:   # Job Search tab
-        job_search.render(client)
+    with tabs[5]:   # Job Search tab (local agent)
+        job_search.render()
 
     with tabs[6]:   # Mock Interview - Coming Soon
         mock_interview.render()
