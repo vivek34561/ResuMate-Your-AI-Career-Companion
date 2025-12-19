@@ -26,12 +26,10 @@ def display_header():
     st.title("🤖 ResuMate - Your AI Career Companion")
     st.markdown(
         """
-        *Get resume-ready, interview-ready, and hire-ready with AI-powered insights*
-        
         Upload a resume, select a target role or paste job description, and get personalized feedback to improve your job application.
         """
     )
-    st.divider()
+    # st.divider()
 
 
 def setup_sidebar() -> Dict:
@@ -64,7 +62,6 @@ def setup_sidebar() -> Dict:
             try:
                 saved_resumes = get_user_resumes(_user["id"]) or []
                 if saved_resumes:
-                    st.markdown("---")
                     st.subheader("Saved Resumes")
                     labels = [
                         f"{r.get('filename') or 'resume'} · {str(r.get('created_at'))[:19]}" for r in saved_resumes
@@ -84,14 +81,11 @@ def setup_sidebar() -> Dict:
                     )
                     saved_resume_id = ids[sel]
                     st.session_state["selected_resume_id"] = saved_resume_id
-                    st.caption(
-                        "Tip: Click Analyze in the main page to analyze this saved resume without re-embedding."
-                    )
+                    
             except Exception as e:
                 st.info(f"Could not load saved resumes: {e}")
 
         st.subheader("AI Provider")
-        st.caption("Using Groq for all AI features")
         provider = "groq"
         api_key = st.text_input(
             "Enter Your Groq API Key (optional if set in .env)",
@@ -105,12 +99,6 @@ def setup_sidebar() -> Dict:
         )
         if not api_key or api_key.strip() == "":
             api_key = os.getenv("GROQ_API_KEY", "")
-            if api_key:
-                st.caption("✅ Using API key from .env file")
-            else:
-                st.warning(
-                    "⚠️ No API key provided. Please enter your Groq API key or set GROQ_API_KEY in .env file"
-                )
         else:
             st.caption("✅ Using your provided API key")
 
@@ -139,17 +127,7 @@ def setup_sidebar() -> Dict:
         else:
             model = preset
 
-        st.markdown("---")
-        st.subheader("Job APIs")
-        existing_jooble = (_user_settings.get("jooble_api_key") if _user_settings else None) or os.getenv(
-            "JOOBLE_API_KEY", ""
-        )
-        jooble_api_key = st.text_input(
-            "Jooble API Key (per user)",
-            value=existing_jooble,
-            type="password",
-            help="Used for Jooble job search. Stored in your user settings.",
-        )
+        jooble_api_key = os.getenv("JOOBLE_API_KEY", "")
 
         st.markdown("---")
         st.markdown(
@@ -185,10 +163,10 @@ def create_tabs() -> List:
     return st.tabs(
         [
             "📝 Resume Analysis",
-            "💬 Resume Chatbot",
-            "💡 Interview Questions",
+            "💬 Ask anything about your resume",
+            "💡 Generate Interview Questions",
             "✨ Resume Improvement",
-            "✉️ Cover Letter",
+            "✉️ Generate Cover Letter",
             "🔍 Job Search",
             "🎤 Mock Interview",
             "🧩 LaTeX Resume Update",

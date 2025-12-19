@@ -68,16 +68,12 @@ def main():
     if not ensure_logged_in():
         return
     
-    config = ui.setup_sidebar() # config = openai api key
-    # Merge with user settings
-    # Prefer user saved defaults if present
+    config = ui.setup_sidebar() 
     us = st.session_state.get('user_settings') or {}
     if us:
         # Only set defaults if not provided in the current sidebar selection
         config.setdefault('provider', us.get('provider'))
         config.setdefault('model', us.get('model'))
-        if config.get('provider') == 'ollama' and 'ollama_base_url' not in config and us.get('ollama_base_url'):
-            config['ollama_base_url'] = us.get('ollama_base_url')
     agent  = setup_agent(config)
     # Save the settings for this user
     try:
@@ -85,7 +81,6 @@ def main():
             to_save = {
                 'provider': st.session_state.get('provider'),
                 'model': (st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')),
-                'ollama_base_url': st.session_state.get('ollama_base_url') if st.session_state.get('provider')=='ollama' else None,
                 'jooble_api_key': config.get('jooble_api_key') or (st.session_state.get('user_settings') or {}).get('jooble_api_key'),
             }
             save_user_settings(st.session_state.user['id'], to_save)
