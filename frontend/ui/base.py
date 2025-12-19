@@ -103,12 +103,12 @@ def setup_sidebar() -> Dict:
             st.caption("✅ Using your provided API key")
 
         groq_models = [
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
             "llama-3.3-70b-versatile",
-            "mixtral-8x7b-32768",
-            "llama-3.1-8b-instant",
             "Custom...",
         ]
-        env_model = _user_settings.get("model") or os.getenv("GROQ_MODEL") or "llama-3.1-8b-instant"
+        env_model = _user_settings.get("model") or os.getenv("GROQ_MODEL") or "openai/gpt-oss-20b"
         default_model_index = (
             groq_models.index(env_model) if env_model in groq_models else groq_models.index("Custom...")
         )
@@ -168,7 +168,6 @@ def create_tabs() -> List:
             "✨ Resume Improvement",
             "✉️ Generate Cover Letter",
             "🔍 Job Search",
-            "🎤 Mock Interview",
             "🧩 LaTeX Resume Update",
         ]
     )

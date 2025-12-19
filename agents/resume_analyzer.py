@@ -7,7 +7,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 
-from utils.llm_providers import groq_chat, ollama_chat
+from utils.llm_providers import groq_chat
 from utils.text_utils import clamp_text, compute_hash
 from utils.file_handlers import extract_text_from_pdf, extract_text_from_txt, extract_text_from_file
 
@@ -16,18 +16,14 @@ class ResumeAnalyzer:
     """Handles resume analysis, skill extraction, and job description processing."""
     
     def __init__(self, api_key, cutoff_score=75, model=None, provider: str = 'groq', 
-                 ollama_base_url: str | None = None, user_id: int | None = None, 
+                 user_id: int | None = None, 
                  vector_cache_dir: str | None = None):
         self.api_key = api_key
         self.cutoff_score = cutoff_score
-        self.provider = provider
-        self.ollama_base_url = ollama_base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
+        self.provider = 'groq'
         
-        # Prefer provider-specific default
-        if provider == 'ollama':
-            self.model = model or os.getenv("OLLAMA_MODEL") or "llama3.1:8b"
-        else:
-            self.model = model or os.getenv("GROQ_MODEL") or "llama-3.1-8b-instant"
+        # Prefer Groq default
+        self.model = model or os.getenv("GROQ_MODEL") or "llama-3.1-8b-instant"
         
         self.resume_text = None
         self.resume_hash = None
@@ -66,9 +62,7 @@ class ResumeAnalyzer:
         return compute_hash(base)
 
     def llm_chat(self, messages: list, temperature: float = 0.2, max_tokens: int = 600) -> str:
-        """Provider-aware chat helper."""
-        if self.provider == 'ollama':
-            return ollama_chat(messages, model=self.model, base_url=self.ollama_base_url, temperature=temperature)
+        """Groq-only chat helper."""
         return groq_chat(self.api_key, messages=messages, model=self.model, temperature=temperature, max_tokens=max_tokens)
 
     def extract_text_from_pdf(self, pdf_file):

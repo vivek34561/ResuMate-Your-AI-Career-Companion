@@ -1,4 +1,4 @@
-"""LLM Provider utilities for Groq and Ollama."""
+"""LLM Provider utilities for Groq."""
 
 import os
 import re
@@ -59,65 +59,4 @@ def groq_chat(api_key: str, messages: list, model: str = None, temperature: floa
     raise RuntimeError("Groq request failed after retries")
 
 
-def ollama_chat(messages: list, model: str, base_url: str = None, temperature: float = 0.2) -> str:
-    """Call local Ollama chat; if /api/chat is not available (404), fallback to /api/generate."""
-    url_base = (base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
-    headers = {"Content-Type": "application/json"}
-
-    def _messages_to_prompt(msgs: list) -> str:
-        parts = []
-        for m in msgs:
-            role = (m.get("role") or "user").lower()
-            if role == "system": label = "System"
-            elif role == "assistant": label = "Assistant"
-            else: label = "User"
-            parts.append(f"{label}: {m.get('content','')}")
-        parts.append("Assistant:")
-        return "\n".join(parts)
-
-    chat_url = f"{url_base}/api/chat"
-    chat_payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "options": {"temperature": temperature}
-    }
-    resp = SESSION.post(chat_url, headers=headers, json=chat_payload, timeout=120)
-    if resp.status_code == 404:
-        def _try_generate(base):
-            gen_url = f"{base}/api/generate"
-            prompt = _messages_to_prompt(messages)
-            gen_payload = {
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": temperature}
-            }
-            gr = SESSION.post(gen_url, headers=headers, json=gen_payload, timeout=120)
-            # If model isn't pulled, Ollama returns 404 Not Found with a helpful message
-            if gr.status_code == 404:
-                try:
-                    err_txt = gr.text
-                except Exception:
-                    err_txt = ""
-                raise requests.HTTPError(
-                    f"Ollama model not found: '{model}'. Pull it first: ollama pull {model}. Server said: {err_txt}"
-                )
-            gr.raise_for_status()
-            gd = gr.json()
-            return gd.get("response", json.dumps(gd))
-        try:
-            return _try_generate(url_base)
-        except Exception:
-            alt_base = ("http://127.0.0.1:11434" if "localhost" in url_base else url_base)
-            return _try_generate(alt_base)
-    resp.raise_for_status()
-    data = resp.json()
-    msg = data.get("message") or {}
-    content = msg.get("content")
-    if content:
-        return content
-    try:
-        return data.get("messages", [{}])[-1].get("content", "")
-    except Exception:
-        return json.dumps(data)
+# Ollama support removed per project configuration.

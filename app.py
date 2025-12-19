@@ -15,7 +15,6 @@ from frontend.tabs import (
     resume_improvement,
     cover_letter,
     job_search,
-    mock_interview,
     latex_resume_update,
 )
 import atexit
@@ -36,20 +35,7 @@ if 'analysis_result' not in st.session_state:
     st.session_state.analysis_result = None
 if 'api_key' not in st.session_state:
     st.session_state.api_key = None
-if 'interview' not in st.session_state:
-    st.session_state.interview = {
-        'started': False,
-        'completed': False,
-        'current': 0,
-        'questions': [],
-        'answers': [],
-        'transcripts': [],
-        'per_q_scores': [],
-        'summary': None,
-        'start_time': None,
-        'max_duration_sec': 15 * 60,
-        'decision': None,
-    }
+ 
 if 'user' not in st.session_state:
     st.session_state.user = None
 if 'user_settings' not in st.session_state:
@@ -81,7 +67,7 @@ def main():
         if st.session_state.user:
             to_save = {
                 'provider': st.session_state.get('provider'),
-                'model': (st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')),
+                'model': st.session_state.get('groq_model'),
                 'jooble_api_key': config.get('jooble_api_key') or (st.session_state.get('user_settings') or {}).get('jooble_api_key'),
                 'api_key': config.get('api_key') or os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY'),
             }
@@ -90,7 +76,7 @@ def main():
     except Exception as e:
         st.info(f"Could not save settings: {e}")
     
-    st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')} | Analyzed: {st.session_state.get('resume_analyzed')}")
+    st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model')} | Analyzed: {st.session_state.get('resume_analyzed')}")
     
     tabs  = ui.create_tabs()
     
@@ -116,10 +102,7 @@ def main():
     with tabs[5]:   # Job Search tab (local agent)
         job_search.render()
 
-    with tabs[6]:   # Mock Interview - Coming Soon
-        mock_interview.render()
-
-    with tabs[7]:   # LaTeX Resume Update - Coming Soon
+    with tabs[6]:   # LaTeX Resume Update - Coming Soon
         latex_resume_update.render()
 
   

@@ -6,7 +6,7 @@ from .resume_improver import ResumeImprover
 from .job_search_agent import JobAgent
 
 # Import LLM functions for backward compatibility
-from utils.llm_providers import groq_chat, ollama_chat, SESSION
+from utils.llm_providers import groq_chat, SESSION
 from utils.text_utils import clamp_text as _clamp_text
 
 
@@ -76,7 +76,6 @@ __all__ = [
     'ResumeAnalysisAgent',  # Backward compatibility
     # LLM functions for backward compatibility
     'groq_chat',
-    'ollama_chat',
     'SESSION',
     '_clamp_text',
 ]
