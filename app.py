@@ -20,6 +20,8 @@ from frontend.tabs import (
 )
 import atexit
 import os
+import requests
+from frontend.backend_client import BackendClient
 
 st.set_page_config(
     page_title = "ResuMate - Your AI Career Companion",
@@ -64,6 +66,17 @@ atexit.register(cleanup)
 def main():
     ui.setup_page()
     ui.display_header()
+    # Backend health (optional): show FastAPI backend connectivity
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+    backend_status = "unknown"
+    try:
+        r = requests.get(f"{backend_url}/health", timeout=2)
+        if r.ok and (r.json() or {}).get("status") == "ok":
+            backend_status = "connected"
+        else:
+            backend_status = "unavailable"
+    except Exception:
+        backend_status = "unavailable"
     # Login gate
     if not ensure_logged_in():
         return
@@ -74,6 +87,8 @@ def main():
         # Only set defaults if not provided in the current sidebar selection
         config.setdefault('provider', us.get('provider'))
         config.setdefault('model', us.get('model'))
+    # Initialize backend client and (optionally) local agent
+    client = BackendClient(base_url=backend_url)
     agent  = setup_agent(config)
     # Save the settings for this user
     try:
@@ -82,36 +97,38 @@ def main():
                 'provider': st.session_state.get('provider'),
                 'model': (st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')),
                 'jooble_api_key': config.get('jooble_api_key') or (st.session_state.get('user_settings') or {}).get('jooble_api_key'),
+                'api_key': config.get('api_key') or os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY'),
             }
             save_user_settings(st.session_state.user['id'], to_save)
             st.session_state.user_settings = to_save
     except Exception as e:
         st.info(f"Could not save settings: {e}")
     
-    st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')} | Analyzed: {st.session_state.get('resume_analyzed')}")
+    st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model') if st.session_state.get('provider')=='groq' else st.session_state.get('ollama_model')} | Analyzed: {st.session_state.get('resume_analyzed')} | Backend: {backend_status}")
     
     tabs  = ui.create_tabs()
     
     with tabs[0]:
-        resume_analysis.render(agent)
+        # Use backend for analysis
+        resume_analysis.render(client)
             
-    
     with tabs[1]:
-        resume_qa.render(st.session_state.resume_agent)
+        # Use backend for Q&A
+        resume_qa.render(client)
     
     
     with tabs[2]:
-        interview_questions.render(st.session_state.resume_agent)
+        interview_questions.render(client)
             
     
     with tabs[3]:   # Resume Improvement tab
-        resume_improvement.render(st.session_state.resume_agent)
+        resume_improvement.render(client)
 
     with tabs[4]:   # Cover Letter tab
         cover_letter.render(st.session_state.resume_agent)
 
     with tabs[5]:   # Job Search tab
-        job_search.render()
+        job_search.render(client)
 
     with tabs[6]:   # Mock Interview - Coming Soon
         mock_interview.render()

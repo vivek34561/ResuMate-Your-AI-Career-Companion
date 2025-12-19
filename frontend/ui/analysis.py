@@ -118,3 +118,11 @@ def display_analysis_results(analysis_result: Dict):
             else:
                 st.success("✅ No major skill gaps identified!")
     st.markdown("---")
+
+    # Enhanced Visuals (radar, pie, ranking, waterfall)
+    try:
+        from utils.visualizations import display_enhanced_visualizations
+        display_enhanced_visualizations(analysis_result)
+    except Exception as _e:
+        # Keep UI resilient if optional visuals fail
+        pass

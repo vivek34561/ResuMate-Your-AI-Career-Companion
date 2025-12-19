@@ -1,41 +1,56 @@
 import streamlit as st
 from frontend import ui
-from agents import ResumeAnalysisAgent
+from frontend.backend_client import BackendClient
 
 
-def improve_resume(agent: ResumeAnalysisAgent, improvement_areas: list, target_role: str):
+def improve_resume(client: BackendClient, improvement_areas: list, target_role: str):
     try:
-        result = agent.improve_resume(improvement_areas, target_role)
-        if result:
-            has_content = any(
-                imp.get('specific') and len(imp.get('specific', [])) > 1
-                for imp in result.values() if isinstance(imp, dict)
-            )
-            if not has_content:
-                st.warning("⚠️ Received generic suggestions. The AI may need more context. Try analyzing the resume first or providing a target role.")
-        return result
+        resume_id = st.session_state.get("active_resume_id") or st.session_state.get("use_saved_resume_id") or st.session_state.get("selected_resume_id")
+        resp = client.improve_resume(st.session_state.get('user') or {}, focus_areas=improvement_areas, resume_id=resume_id)
+        # Adapt backend response to UI-expected structure
+        improved_sections = resp.get("improved_sections", {})
+        suggestions = resp.get("suggestions", [])
+        adapted = {}
+        for section, text in improved_sections.items():
+            adapted[section] = {
+                "description": text,
+                "specific": suggestions or [],
+            }
+        if not adapted:
+            st.warning("⚠️ No specific improvements returned. Try selecting different areas or re-running analysis.")
+        return adapted
     except Exception as e:
         st.error(f"Error generating improvement suggestions: {e}")
-        import traceback
-        st.code(traceback.format_exc())
         return {}
 
 
-def get_improved_resume(agent: ResumeAnalysisAgent, target_role: str, highlight_skills: str):
+def get_improved_resume(client: BackendClient, target_role: str, highlight_skills: str):
+    # Not yet implemented on backend; fallback to suggestions summary
     try:
-        with st.spinner("Generating improved resume..."):
-            return agent.get_improved_resume(target_role, highlight_skills)
-    except Exception as e:
-        st.error(f"Error generating improved resume: {e}")
+        sugg = st.session_state.get('improvement_suggestions') or {}
+        combined = []
+        for k, v in sugg.items():
+            if isinstance(v, dict):
+                desc = v.get('description')
+                if desc:
+                    combined.append(f"[{k}] {desc}")
+                for s in v.get('specific', []) or []:
+                    combined.append(f"- {s}")
+            else:
+                combined.append(str(v))
+        if not combined:
+            return "No improved resume text available. Generate suggestions first."
+        return "\n".join(combined)
+    except Exception:
         return "Error generating improved resume."
 
 
-def render(agent):
-    if st.session_state.resume_analyzed and agent:
+def render(client: BackendClient):
+    if st.session_state.resume_analyzed and client:
         ui.resume_improvement_section(
             has_resume=True,
-            improve_resume_func=lambda areas, role: improve_resume(agent, areas, role),
-            get_improved_resume_func=lambda role, skills: get_improved_resume(agent, role, skills),
+            improve_resume_func=lambda areas, role: improve_resume(client, areas, role),
+            get_improved_resume_func=lambda role, skills: get_improved_resume(client, role, skills),
         )
     else:
         st.warning("Please upload and analyze a resume first in the 'Resume Analysis' tab.")

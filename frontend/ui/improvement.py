@@ -293,7 +293,10 @@ def resume_improvement_section(has_resume: bool, improve_resume_func: Callable, 
                     col_orig, col_new = st.columns(2)
                     with col_orig:
                         st.markdown("#### 📄 Original Resume")
-                        original_text = getattr(st.session_state.get('resume_agent'), 'resume_text', 'Original resume not available')
+                        original_text = getattr(st.session_state.get('resume_agent'), 'resume_text', None)
+                        # Gracefully handle None or non-string values
+                        if not isinstance(original_text, str):
+                            original_text = original_text or "Original resume not available"
                         st.text_area(
                             "Original",
                             value=original_text[:2000] if len(original_text) > 2000 else original_text,
@@ -301,18 +304,19 @@ def resume_improvement_section(has_resume: bool, improve_resume_func: Callable, 
                             disabled=True,
                             key="original_resume_view",
                         )
-                        if len(original_text) > 2000:
+                        if isinstance(original_text, str) and len(original_text) > 2000:
                             st.caption("📝 Showing first 2000 characters")
                     with col_new:
                         st.markdown("#### ✨ Improved Resume")
+                        improved_text = st.session_state.get('improved_resume_text') or ""
                         st.text_area(
                             "Improved",
-                            value=st.session_state['improved_resume_text'][:2000] if len(st.session_state['improved_resume_text']) > 2000 else st.session_state['improved_resume_text'],
+                            value=improved_text[:2000] if len(improved_text) > 2000 else improved_text,
                             height=400,
                             disabled=True,
                             key="improved_resume_compare_view",
                         )
-                        if len(st.session_state['improved_resume_text']) > 2000:
+                        if len(improved_text) > 2000:
                             st.caption("📝 Showing first 2000 characters")
                     st.success("✅ Notice the improvements: stronger action verbs, quantified achievements, better keywords, and ATS optimization!")
     else:

@@ -3,7 +3,7 @@ Mock Interview API routes
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import time
 import uuid
 import os
@@ -20,14 +20,22 @@ from api.models import (
     SuccessResponse,
 )
 from api.routes.auth import verify_token
-from api.routes.resume import get_user_agent
-from database import get_user_resume_by_id
+from api.routes.resume import get_user_agent, user_analysis_cache
+from database import get_user_resume_by_id, get_user_resumes
 from agents import ResumeAnalysisAgent
+
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
 # In-memory storage for active interviews (use Redis in production)
 active_interviews: Dict[str, Dict[str, Any]] = {}
+
+
+class QuestionGenRequest(BaseModel):
+    question_types: List[str]
+    difficulty: str = "Medium"
+    num_questions: int = Field(default=10, ge=1, le=20)
 
 
 @router.post("/start", response_model=InterviewStartResponse)
@@ -51,11 +59,16 @@ async def start_interview(
     try:
         user_id = user["user_id"]
         
-        # Get resume text
+        # Get resume text (correct param order and latest fallback)
         if resume_id:
-            resume_data = get_user_resume_by_id(resume_id, user_id)
+            resume_data = get_user_resume_by_id(user_id, resume_id)
         else:
-            resume_data = get_user_resume_by_id(None, user_id)
+            all_resumes = get_user_resumes(user_id)
+            if not all_resumes:
+                resume_data = None
+            else:
+                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
+                resume_data = get_user_resume_by_id(user_id, latest_id)
         
         if not resume_data:
             raise HTTPException(
@@ -67,7 +80,35 @@ async def start_interview(
         
         # Set resume text in agent
         if not agent.resume_text:
-            agent.set_resume(resume_text)
+            agent.resume_text = resume_text
+
+        # Ensure analysis context/skills are available
+        if not getattr(agent, "analysis_result", None):
+            try:
+                cached = user_analysis_cache.get(user_id)
+                if cached and cached.get("resume_text") == resume_text:
+                    agent.analysis_result = cached.get("analysis")
+            except Exception:
+                pass
+        if not getattr(agent, "extracted_skills", None):
+            skills = []
+            try:
+                ss = (agent.analysis_result or {}).get("skill_scores") or {}
+                if ss:
+                    skills = list(ss.keys())
+                else:
+                    strengths = (agent.analysis_result or {}).get("strengths") or []
+                    missing = (agent.analysis_result or {}).get("missing_skills") or []
+                    skills = list(dict.fromkeys(strengths + missing))
+            except Exception:
+                skills = []
+            if not skills:
+                # Fallback: heuristically extract from resume text
+                try:
+                    skills = agent.fast_extract_skills_from_jd(resume_text)[:15]
+                except Exception:
+                    skills = []
+            agent.extracted_skills = skills
         
         # Generate interview questions
         questions = agent.generate_interview_questions(
@@ -136,6 +177,113 @@ async def start_interview(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start interview: {str(e)}"
         )
+
+
+@router.post("/questions")
+async def generate_questions(
+    req: QuestionGenRequest,
+    resume_id: Optional[int] = None,
+    agent: ResumeAnalysisAgent = Depends(get_user_agent),
+    user: dict = Depends(verify_token)
+):
+    """
+    Generate interview questions directly (UI-friendly helper)
+
+    - **question_types**: List of strings (e.g., ["Technical", "Behavioral"])
+    - **difficulty**: One of [Easy, Medium, Hard, Mixed]
+    - **num_questions**: 1-20
+    - **resume_id**: Optional resume ID (uses latest if not provided)
+    """
+    try:
+        user_id = user["user_id"]
+
+        # Get resume text (correct param order and latest fallback)
+        if resume_id:
+            resume_data = get_user_resume_by_id(user_id, resume_id)
+        else:
+            all_resumes = get_user_resumes(user_id)
+            if not all_resumes:
+                resume_data = None
+            else:
+                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
+                resume_data = get_user_resume_by_id(user_id, latest_id)
+
+        if not resume_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No resume found. Please upload a resume first."
+            )
+
+        resume_text = resume_data.get("resume_text")
+
+        # Set resume text in agent
+        if not agent.resume_text:
+            agent.resume_text = resume_text
+
+        # Ensure analysis context/skills are available
+        if not getattr(agent, "analysis_result", None):
+            try:
+                cached = user_analysis_cache.get(user_id)
+                if cached and cached.get("resume_text") == resume_text:
+                    agent.analysis_result = cached.get("analysis")
+            except Exception:
+                pass
+        if not getattr(agent, "extracted_skills", None):
+            skills = []
+            try:
+                ss = (agent.analysis_result or {}).get("skill_scores") or {}
+                if ss:
+                    skills = list(ss.keys())
+                else:
+                    strengths = (agent.analysis_result or {}).get("strengths") or []
+                    missing = (agent.analysis_result or {}).get("missing_skills") or []
+                    skills = list(dict.fromkeys(strengths + missing))
+            except Exception:
+                skills = []
+            if not skills:
+                # Fallback: heuristically extract from resume text
+                try:
+                    skills = agent.fast_extract_skills_from_jd(resume_text)[:15]
+                except Exception:
+                    skills = []
+            agent.extracted_skills = skills
+
+        # Generate questions
+        questions = agent.generate_interview_questions(
+            question_types=req.question_types,
+            difficulty=req.difficulty,
+            num_questions=req.num_questions,
+        )
+
+        if not questions:
+            return {"questions": []}
+
+        normalized = []
+        for q in questions:
+            if isinstance(q, dict):
+                normalized.append({
+                    "question": q.get("question") or q.get("text") or str(q),
+                    "solution": q.get("solution") or q.get("answer"),
+                })
+            else:
+                normalized.append({"question": str(q), "solution": None})
+
+        return {"questions": normalized[: req.num_questions]}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate questions: {str(e)}"
+        )
+
+# Alias with trailing slash to avoid client path mismatch
+router.add_api_route(
+    "/questions/",
+    generate_questions,
+    methods=["POST"],
+)
 
 
 @router.post("/answer", response_model=AnswerSubmissionResponse)

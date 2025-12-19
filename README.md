@@ -150,3 +150,26 @@ streamlit run app.py
 ```
 
 Then open the printed local URL in your browser.
+
+---
+
+## FastAPI Backend (New)
+
+A structured FastAPI backend is available under `backend/` and mounts existing routers from the `api/` package.
+
+- Base URL: `http://localhost:8000`
+- Health: `/health`
+- Versioned routes: `/api/v1/*`
+
+Run locally:
+
+```powershell
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Configure CORS and Streamlit connection:
+
+- `CORS_ALLOWED_ORIGINS` (comma-separated), default: `http://localhost:8501`
+- `BACKEND_URL` (used by Streamlit to show status), default: `http://localhost:8000`
+
+Streamlit shows backend status in the header caption.

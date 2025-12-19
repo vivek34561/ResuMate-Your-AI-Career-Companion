@@ -18,11 +18,16 @@ from api.models import (
     SuccessResponse,
 )
 from api.routes.auth import verify_token
-from database import save_user_resume, get_user_resume_by_id, get_user_settings
+from database import save_user_resume, get_user_resume_by_id, get_user_settings, get_user_resumes
+import hashlib
 from agents import ResumeAnalysisAgent
 from utils.file_handlers import extract_text_from_file
 
 router = APIRouter()
+
+# Simple in-memory cache to allow improvement requests after analysis
+# In production, replace with Redis or database persistence
+user_analysis_cache = {}
 
 
 def get_user_agent(user: dict = Depends(verify_token)):
@@ -33,7 +38,7 @@ def get_user_agent(user: dict = Depends(verify_token)):
     settings = get_user_settings(user_id) or {}
     
     provider = settings.get("provider", "groq")
-    api_key = settings.get("api_key", os.getenv("GROQ_API_KEY"))
+    api_key = settings.get("api_key") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
     model = settings.get("model")
     ollama_base_url = settings.get("ollama_base_url", "http://localhost:11434")
     
@@ -96,8 +101,10 @@ async def upload_resume(
                 detail="Resume text is too short or empty"
             )
         
-        # Save to database
-        resume_id = save_user_resume(user_id, resume_text, file.filename)
+        # Save to database (compute stable hash of content)
+        resume_hash = hashlib.sha256(resume_text.encode("utf-8")).hexdigest()
+        safe_name = file.filename or "uploaded_resume"
+        resume_id = save_user_resume(user_id, safe_name, resume_hash, resume_text)
         
         if not resume_id:
             raise HTTPException(
@@ -146,9 +153,14 @@ async def analyze_resume(
         
         # Get resume text
         if resume_id:
-            resume_data = get_user_resume_by_id(resume_id, user_id)
+            resume_data = get_user_resume_by_id(user_id, resume_id)
         else:
-            resume_data = get_user_resume_by_id(None, user_id)
+            all_resumes = get_user_resumes(user_id)
+            if not all_resumes:
+                resume_data = None
+            else:
+                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
+                resume_data = get_user_resume_by_id(user_id, latest_id)
         
         if not resume_data:
             raise HTTPException(
@@ -158,16 +170,21 @@ async def analyze_resume(
         
         resume_text = resume_data.get("resume_text")
         
-        # Set resume text in agent
-        agent.set_resume(resume_text)
-        
-        # Perform analysis
-        result = agent.analyze_resume(
-            role=request.role,
-            cutoff_score=request.cutoff_score,
-            jd_text=request.jd_text,
-            custom_skills=request.custom_skills
-        )
+        # Configure agent cutoff and analyze from text
+        try:
+            if request.cutoff_score is not None:
+                agent.cutoff_score = request.cutoff_score
+            result = agent.analyze_resume_text(
+                resume_text,
+                role_requirements=(request.custom_skills or []),
+                custom_jd=request.jd_text,
+                quick=False,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Agent analysis error: {str(e)}"
+            )
         
         if not result:
             raise HTTPException(
@@ -175,7 +192,7 @@ async def analyze_resume(
                 detail="Analysis failed"
             )
         
-        return ResumeAnalysisResponse(
+        resp = ResumeAnalysisResponse(
             overall_score=result.get("overall_score", 0),
             matching_skills=result.get("matching_skills", []),
             missing_skills=result.get("missing_skills", []),
@@ -185,7 +202,15 @@ async def analyze_resume(
             recommendations=result.get("recommendations", []),
             resume_hash=result.get("resume_hash", "")
         )
-    
+        # cache analysis for subsequent improvement calls
+        try:
+            user_analysis_cache[user_id] = {
+                "resume_text": resume_text,
+                "analysis": result,
+            }
+        except Exception:
+            pass
+        return resp
     except HTTPException:
         raise
     except Exception as e:
@@ -193,6 +218,14 @@ async def analyze_resume(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis failed: {str(e)}"
         )
+
+# Alias with trailing slash to avoid client path mismatch
+router.add_api_route(
+    "/analyze/",
+    analyze_resume,
+    methods=["POST"],
+    response_model=ResumeAnalysisResponse,
+)
 
 
 @router.post("/improve", response_model=ResumeImprovementResponse)
@@ -215,9 +248,14 @@ async def improve_resume(
         
         # Get resume text
         if resume_id:
-            resume_data = get_user_resume_by_id(resume_id, user_id)
+            resume_data = get_user_resume_by_id(user_id, resume_id)
         else:
-            resume_data = get_user_resume_by_id(None, user_id)
+            all_resumes = get_user_resumes(user_id)
+            if not all_resumes:
+                resume_data = None
+            else:
+                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
+                resume_data = get_user_resume_by_id(user_id, latest_id)
         
         if not resume_data:
             raise HTTPException(
@@ -227,19 +265,23 @@ async def improve_resume(
         
         resume_text = resume_data.get("resume_text")
         
-        # Set resume text in agent
+        # Ensure agent has resume text
         if not agent.resume_text:
-            agent.set_resume(resume_text)
+            agent.resume_text = resume_text
         
-        # Check if analysis exists
+        # Ensure analysis exists: use cached analysis if available
         if not agent.analysis_result:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Please analyze the resume first"
-            )
+            cached = user_analysis_cache.get(user_id)
+            if cached and cached.get("resume_text") == resume_text:
+                agent.analysis_result = cached.get("analysis")
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Please analyze the resume first"
+                )
         
-        # Get improvements
-        improvements = agent.generate_improvements(focus_areas=request.focus_areas)
+        # Get improvements using improver agent
+        improvements = agent.improve_resume(improvement_areas=(request.focus_areas or []), target_role="")
         
         if not improvements:
             raise HTTPException(
@@ -247,10 +289,21 @@ async def improve_resume(
                 detail="Failed to generate improvements"
             )
         
+        # Adapt improver output to response schema
+        improved_sections = {}
+        suggestions = []
+        for area, data in (improvements or {}).items():
+            if isinstance(data, dict):
+                desc = data.get("description")
+                if desc:
+                    improved_sections[area] = desc
+                for s in data.get("specific", []) or []:
+                    suggestions.append(s)
+        summary = "; ".join([f"{k}: {v[:80]}" for k, v in improved_sections.items()]) if improved_sections else ""
         return ResumeImprovementResponse(
-            improved_sections=improvements.get("sections", {}),
-            suggestions=improvements.get("suggestions", []),
-            overall_improvements=improvements.get("summary", "")
+            improved_sections=improved_sections,
+            suggestions=suggestions,
+            overall_improvements=summary
         )
     
     except HTTPException:
@@ -283,9 +336,14 @@ async def ask_question(
         
         # Get resume text
         if resume_id:
-            resume_data = get_user_resume_by_id(resume_id, user_id)
+            resume_data = get_user_resume_by_id(user_id, resume_id)
         else:
-            resume_data = get_user_resume_by_id(None, user_id)
+            all_resumes = get_user_resumes(user_id)
+            if not all_resumes:
+                resume_data = None
+            else:
+                latest_id = (all_resumes[0].get("id") if isinstance(all_resumes[0], dict) else all_resumes[0])
+                resume_data = get_user_resume_by_id(user_id, latest_id)
         
         if not resume_data:
             raise HTTPException(
@@ -295,9 +353,9 @@ async def ask_question(
         
         resume_text = resume_data.get("resume_text")
         
-        # Set resume text in agent
+        # Ensure agent has resume text
         if not agent.resume_text:
-            agent.set_resume(resume_text)
+            agent.resume_text = resume_text
         
         # Ask question
         answer = agent.ask_question(request.question, request.chat_history)
