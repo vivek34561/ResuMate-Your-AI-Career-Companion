@@ -4,7 +4,7 @@ FastAPI Backend for Resume Tracking and AI-Based Mock Interview System
 
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
@@ -20,7 +20,7 @@ from database import (
 )
 
 # Import API routes
-from api.routes import auth, resume, interview, settings
+# API route modules disabled (no auth/no routes)
 
 # Initialize database on startup
 @asynccontextmanager
@@ -62,14 +62,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Security
-security = HTTPBearer()
+# Security removed (no auth)
 
 # Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(resume.router, prefix="/api/resume", tags=["Resume Analysis"])
-app.include_router(interview.router, prefix="/api/interview", tags=["Mock Interview"])
-app.include_router(settings.router, prefix="/api/settings", tags=["User Settings"])
+# No routers included to avoid broken auth-dependent modules
 
 # Root endpoint
 @app.get("/")

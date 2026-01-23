@@ -3,10 +3,6 @@ from frontend.provider import setup_agent
 from dotenv import load_dotenv
 load_dotenv()
 from frontend import ui
-from database import (
-    save_user_settings,
-)
-from frontend.auth_ui import ensure_logged_in
 from frontend.provider import setup_agent
 from frontend.tabs import (
     resume_analysis,
@@ -50,9 +46,6 @@ atexit.register(cleanup)
 def main():
     ui.setup_page()
     ui.display_header()
-    # Login gate
-    if not ensure_logged_in():
-        return
     
     config = ui.setup_sidebar() 
     us = st.session_state.get('user_settings') or {}
@@ -62,19 +55,17 @@ def main():
         config.setdefault('model', us.get('model'))
     # Initialize local agent for features that still use it (e.g., cover letter)
     agent  = setup_agent(config)
-    # Save the settings for this user
+    # Persist settings locally in session (no login/DB)
     try:
-        if st.session_state.user:
-            to_save = {
-                'provider': st.session_state.get('provider'),
-                'model': st.session_state.get('groq_model'),
-                'jooble_api_key': config.get('jooble_api_key') or (st.session_state.get('user_settings') or {}).get('jooble_api_key'),
-                'api_key': config.get('api_key') or os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY'),
-            }
-            save_user_settings(st.session_state.user['id'], to_save)
-            st.session_state.user_settings = to_save
+        to_save = {
+            'provider': st.session_state.get('provider'),
+            'model': st.session_state.get('groq_model'),
+            'jooble_api_key': config.get('jooble_api_key') or (st.session_state.get('user_settings') or {}).get('jooble_api_key'),
+            'api_key': config.get('api_key') or os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY'),
+        }
+        st.session_state.user_settings = to_save
     except Exception as e:
-        st.info(f"Could not save settings: {e}")
+        st.info(f"Could not save settings locally: {e}")
     
     st.caption(f"Provider: {st.session_state.get('provider')} | Model: {st.session_state.get('groq_model')} | Analyzed: {st.session_state.get('resume_analyzed')}")
     

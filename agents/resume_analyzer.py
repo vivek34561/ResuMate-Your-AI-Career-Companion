@@ -127,17 +127,33 @@ class ResumeAnalyzer:
             pass
         return vectorstore
 
+    import re
+
     def clean_job_description(self, raw_text: str) -> str:
-        """Clean job description text."""
+        """Clean and normalize a standard job description."""
+        
+        # Remove common non-essential or repeated phrases
         patterns = [
-            r'Apply', r'Save', r'Show more options', r'How your profile.*',
-            r'Get AI-powered advice.*', r'Tailor my resume.*', r'Did you apply.*',
-            r'Yes', r'No'
+            r'Who Can Apply',                
+            r'About the job',
+            r'Development Center:.*',
+            r'Headquarters:.*',
+            r'Work Mode:.*',
+            r'Experience-.*',
+            r'Solvative offers plenty of perks.*',
+            r'Those opting for remote working.*',
+            r'For this, formal communication.*',
+            r'Shall also reimburse you.*'
         ]
+        
         for pat in patterns:
-            raw_text = re.sub(pat, '', raw_text, flags=re.IGNORECASE)
+            raw_text = re.sub(pat, '', raw_text, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Clean extra spaces and empty lines
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        
         return "\n".join(lines)
+
 
     def extract_skills_from_jd(self, jd_text):
         """Extract skills from job description using LLM."""
@@ -210,7 +226,8 @@ class ResumeAnalyzer:
             if c.lower() not in found:
                 found.add(c.lower())
         
-        # Normalize for display
+        # This part of the code is responsible for cleaning, formatting, and ordering the 
+        # extracted skills so they look professional and readable.
         norm = []
         for f in found:
             if len(f) <= 5 and f.isupper():
@@ -402,7 +419,6 @@ class ResumeAnalyzer:
         """Analyze resume from text string."""
         self.resume_text = resume_text or ""
         self.resume_hash = self._compute_resume_hash(self.resume_text)
-        
         try:
             from database import get_cached_analysis, save_cached_analysis
         except Exception:
@@ -425,7 +441,8 @@ class ResumeAnalyzer:
         
         self.extracted_skills = jd_skills
         
-        # Cache hit?
+        # this code avoids re-running the same resume analysis by reusing previously saved results, 
+        # which makes the system faster, cheaper, and more consistent.
         if get_cached_analysis and (self.user_id and self.resume_hash):
             jd_hash = self._compute_jd_hash(self.jd_text, jd_skills)
             prov = getattr(self, 'provider', '')

@@ -224,13 +224,52 @@ class InterviewAgent:
                             cleaned_questions.append({"type": q_type, "question": q_text, "solution": q_sol})
                             seen.add(q_text.lower())
 
-            # Fallback if still empty
-            if not cleaned_questions:
-                for t in question_types:
-                    q_text = f"Tell me about your experience with {t}."
-                    q_sol = self.answer_interview_question(q_text)
-                    cleaned_questions.append({"type": t, "question": q_text, "solution": q_sol})
+            # Ensure we return exactly num_questions: pad deterministically if needed
+            if len(cleaned_questions) < num_questions:
+                remaining = num_questions - len(cleaned_questions)
+                # Build templated questions using extracted skills and allowed types
+                skills = (self.analyzer.extracted_skills or [])
+                strengths = (self.analyzer.analysis_result or {}).get('strengths', [])
+                missing = (self.analyzer.analysis_result or {}).get('missing_skills', [])
+                pool_topics = [*skills, *strengths]
+                if not pool_topics:
+                    # Heuristic fallback: derive topics from resume text
+                    try:
+                        pool_topics = self.analyzer.fast_extract_skills_from_jd(self.analyzer.resume_text)[:10]
+                    except Exception:
+                        pool_topics = []
 
+                type_cycle = [t for t in question_types] if question_types else ["Technical"]
+                templates = {
+                    "Technical": lambda s: f"Can you discuss your hands-on experience with {s}?",
+                    "Projects": lambda s: f"Describe a project where you applied {s}. What was the impact?",
+                    "Behavioral": lambda s: f"Tell me about a time you faced a challenge related to {s}. How did you handle it?",
+                    "Situational": lambda s: f"If you were tasked to improve {s} in our product, how would you approach it?",
+                    "System Design": lambda s: f"Design a scalable system that leverages {s}. What components would you use?",
+                    "Problem Solving": lambda s: f"Given a complex issue involving {s}, how would you diagnose and resolve it?",
+                }
+
+                idx = 0
+                while remaining > 0:
+                    q_type = type_cycle[idx % len(type_cycle)]
+                    # choose a topic; prefer skills/strengths else use type as topic
+                    topic = None
+                    if pool_topics:
+                        topic = pool_topics[idx % len(pool_topics)]
+                    elif missing:
+                        topic = missing[idx % len(missing)]
+                    else:
+                        topic = q_type
+                    # build question via template
+                    template_fn = templates.get(q_type) or (lambda s: f"Tell me about your experience with {s}.")
+                    q_text = template_fn(topic)
+                    if q_text.lower() not in [q.get("question","" ).lower() for q in cleaned_questions]:
+                        q_sol = self.answer_interview_question(q_text)
+                        cleaned_questions.append({"type": q_type, "question": q_text, "solution": q_sol})
+                        remaining -= 1
+                    idx += 1
+
+            # Finally, trim to exact number requested
             return cleaned_questions[:num_questions]
 
         except Exception as e:
